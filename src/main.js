@@ -136,8 +136,7 @@ async function downloadVideo() {
     
     chrome.downloads.download({
       url: streamUrl,
-      filename: filename,
-      saveAs: true
+      filename: filename
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
         throw new Error(chrome.runtime.lastError.message);
