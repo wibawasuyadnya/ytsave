@@ -1,8 +1,7 @@
 // src/background.js
 // Background service worker - Communicates with backend only
 
-// Backend API URL - Change after deploying to Heroku
-const BACKEND_URL = 'https://yt-save-temco.herokuapp.com'; // Change this!
+const BACKEND_URL = 'https://yt-save-temco-eb5d14f938e0.herokuapp.com'; 
 
 const QUALITY_PRIORITY = ['571', '401', '400', '399', '137', '248', '136', '247', '135', '134', '133', '160'];
 

@@ -1,8 +1,6 @@
 // src/main.js
-// NO API KEYS HERE - Everything goes through backend!
 
-// Backend URL - Must match your Heroku deployment
-const BACKEND_URL = 'https://yt-save-temco.herokuapp.com';
+const BACKEND_URL = 'https://yt-save-temco-eb5d14f938e0.herokuapp.com';
 
 // DOM Elements
 const initialState = document.getElementById('initial-state');
