@@ -1,3 +1,4 @@
+/* src/main.css */
 * {
   margin: 0;
   padding: 0;
@@ -194,11 +195,12 @@ input[type="text"]::placeholder {
   margin-bottom: 10px;
 }
 
+/* FIXED: Progress bar now starts at 0% by default */
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #4CAF50, #45a049);
   width: 0%;
-  transition: width 0.3s;
+  transition: width 0.4s ease-out;
   border-radius: 4px;
 }
 

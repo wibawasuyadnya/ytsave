@@ -1,3 +1,4 @@
+// src/content.js
 // Content script for YTSave extension
 // Runs on YouTube pages to enhance functionality
 

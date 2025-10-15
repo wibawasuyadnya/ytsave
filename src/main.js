@@ -1,3 +1,4 @@
+// src/main.js
 // DOM Elements
 const initialState = document.getElementById('initial-state');
 const videoInfoState = document.getElementById('video-info-state');
@@ -15,13 +16,15 @@ const errorMessage = document.getElementById('error-message');
 const errorText = document.getElementById('error-text');
 
 let currentVideoData = null;
+let isDownloading = false;
 
-// Validate YouTube URL
+// Validate YouTube URL - NOW INCLUDES SHORTS
 function validateYouTubeUrl(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
     /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/
+    /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/ // ADDED: Shorts support
   ];
   
   for (const pattern of patterns) {
@@ -45,6 +48,53 @@ function showError(message) {
   setTimeout(() => {
     errorMessage.classList.add('hidden');
   }, 5000);
+}
+
+// Save state to storage
+function saveState() {
+  if (currentVideoData) {
+    chrome.storage.local.set({
+      currentVideo: currentVideoData,
+      isDownloading: isDownloading,
+      downloadProgress: isDownloading ? {
+        visible: !progressContainer.classList.contains('hidden'),
+        width: progressFill.style.width,
+        text: progressText.textContent
+      } : null
+    });
+  }
+}
+
+// Restore state from storage
+async function restoreState() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['currentVideo', 'isDownloading', 'downloadProgress'], (result) => {
+      if (result.currentVideo) {
+        currentVideoData = result.currentVideo;
+        isDownloading = result.isDownloading || false;
+        
+        // Restore UI
+        urlInput.value = `https://www.youtube.com/watch?v=${currentVideoData.videoId}`;
+        urlDisplay.value = urlInput.value;
+        displayVideoInfo(currentVideoData);
+        
+        // Restore download progress if was downloading
+        if (result.downloadProgress && result.downloadProgress.visible) {
+          progressContainer.classList.remove('hidden');
+          progressFill.style.width = result.downloadProgress.width;
+          progressText.textContent = result.downloadProgress.text;
+          downloadBtnMain.disabled = true;
+          downloadBtnTop.disabled = true;
+        }
+      }
+      resolve();
+    });
+  });
+}
+
+// Clear state
+function clearState() {
+  chrome.storage.local.remove(['currentVideo', 'isDownloading', 'downloadProgress']);
 }
 
 // Fetch video metadata
@@ -107,50 +157,80 @@ async function getHighestQualityStream(videoId) {
   }
 }
 
+// Update progress UI
+function updateProgress(width, text) {
+  progressFill.style.width = width;
+  progressText.textContent = text;
+  saveState(); // Save progress state
+}
+
 // Download video
 async function downloadVideo() {
-  if (!currentVideoData) return;
+  if (!currentVideoData || isDownloading) return;
   
   try {
+    isDownloading = true;
+    
     // Disable buttons
     downloadBtnMain.disabled = true;
     downloadBtnTop.disabled = true;
     
-    // Show progress
+    // Show progress - START FROM 0%
     progressContainer.classList.remove('hidden');
-    progressText.textContent = 'Preparing download...';
-    progressFill.style.width = '30%';
+    updateProgress('0%', 'Initializing...');
+    
+    // Small delay to show 0% state
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    // Progress updates with realistic timing
+    updateProgress('20%', 'Preparing download...');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    updateProgress('40%', 'Getting highest quality stream...');
     
     // Get stream URL
-    progressText.textContent = 'Getting highest quality stream...';
-    progressFill.style.width = '60%';
-    
     const streamUrl = await getHighestQualityStream(currentVideoData.videoId);
     
-    // Start download
-    progressText.textContent = 'Starting download...';
-    progressFill.style.width = '90%';
+    updateProgress('70%', 'Starting download...');
+    await new Promise(resolve => setTimeout(resolve, 200));
     
     // Clean filename
     const filename = `${currentVideoData.title.replace(/[^a-z0-9]/gi, '_')}.mp4`;
     
+    updateProgress('85%', 'Initiating file transfer...');
+    
     chrome.downloads.download({
       url: streamUrl,
-      filename: filename
+      filename: filename,
+      saveAs: true
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
         throw new Error(chrome.runtime.lastError.message);
       }
       
       // Complete
-      progressFill.style.width = '100%';
-      progressText.textContent = 'Download started!';
+      updateProgress('100%', 'Download started!');
       
       setTimeout(() => {
+        // Reset everything back to initial state
         progressContainer.classList.add('hidden');
         progressFill.style.width = '0%';
         downloadBtnMain.disabled = false;
         downloadBtnTop.disabled = false;
+        isDownloading = false;
+        
+        // Clear saved state
+        clearState();
+        currentVideoData = null;
+        
+        // Reset UI to initial state
+        videoInfoState.classList.remove('active');
+        initialState.classList.add('active');
+        urlInput.value = '';
+        urlDisplay.value = '';
+        thumbnail.src = '';
+        videoTitle.textContent = 'Loading...';
+        videoDescription.textContent = 'Loading...';
       }, 2000);
     });
     
@@ -161,6 +241,8 @@ async function downloadVideo() {
     progressFill.style.width = '0%';
     downloadBtnMain.disabled = false;
     downloadBtnTop.disabled = false;
+    isDownloading = false;
+    saveState();
   }
 }
 
@@ -191,6 +273,9 @@ async function handleUrlInput() {
     const metadata = await fetchVideoMetadata(videoId);
     currentVideoData = metadata;
     
+    // Save state
+    saveState();
+    
     // Update URL display
     urlDisplay.value = url;
     
@@ -219,12 +304,31 @@ urlInput.addEventListener('keypress', (e) => {
 downloadBtnTop.addEventListener('click', handleUrlInput);
 downloadBtnMain.addEventListener('click', downloadVideo);
 
-// Check if we're on a YouTube page and auto-fill
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-  if (tabs[0] && tabs[0].url) {
-    const videoId = getVideoId(tabs[0].url);
-    if (videoId) {
-      urlInput.value = tabs[0].url;
-    }
+// Initialize: Restore previous state first, then check current tab
+async function initialize() {
+  // First restore any saved state
+  await restoreState();
+  
+  // Then check if we're on a YouTube page and auto-fill (only if no saved state)
+  if (!currentVideoData) {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0] && tabs[0].url) {
+        const videoId = getVideoId(tabs[0].url);
+        if (videoId) {
+          urlInput.value = tabs[0].url;
+        }
+      }
+    });
+  }
+}
+
+// Run initialization
+initialize();
+
+// Listen for messages from background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'downloadComplete') {
+    isDownloading = false;
+    clearState();
   }
 });

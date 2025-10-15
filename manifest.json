@@ -5,7 +5,9 @@
   "description": "Download YouTube videos in highest quality with one click",
   "permissions": [
     "activeTab",
-    "downloads"
+    "downloads",
+    "notifications",
+    "storage"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
