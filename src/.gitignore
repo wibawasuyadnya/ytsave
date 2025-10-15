@@ -1,0 +1,42 @@
+# .gitignore
+# CRITICAL: This prevents API keys from being committed to Git
+
+# Environment variables (NEVER commit!)
+.env
+.env.local
+.env.production
+.env.development
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-workspace
+
+# Logs
+logs/
+*.log
+
+# Build files
+dist/
+build/
+*.zip
+
+# Sensitive data
+config.json
+secrets.json
+credentials.json
+
+# Test files
+coverage/
+.nyc_output/

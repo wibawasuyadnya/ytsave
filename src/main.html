@@ -1,4 +1,3 @@
-<!-- src/main.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,8 +8,47 @@
 </head>
 <body>
   <div class="container">
-    <!-- Before URL is pasted -->
-    <div id="initial-state" class="state active">
+    <!-- Settings Button (Top Right) -->
+    <button id="settings-btn" class="settings-btn hidden">⚙️</button>
+    
+    <!-- AUTH STATE: Registration -->
+    <div id="auth-state" class="state">
+      <div class="auth-header">
+        <h2>Welcome to YTSave</h2>
+        <p>Register to get 100 free downloads per month!</p>
+      </div>
+      
+      <form id="register-form" class="auth-form">
+        <input 
+          type="email" 
+          id="email-input" 
+          placeholder="Enter your email" 
+          required
+        >
+        <input 
+          type="text" 
+          id="name-input" 
+          placeholder="Your name (optional)"
+        >
+        <button type="submit" id="register-btn" class="download-btn">
+          Get Started Free
+        </button>
+      </form>
+      
+      <div class="tier-info">
+        <h3>✨ Free Tier</h3>
+        <ul>
+          <li>100 downloads per month</li>
+          <li>10 downloads per hour</li>
+          <li>Highest quality available</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- INITIAL STATE: URL Input -->
+    <div id="initial-state" class="state">
+      <div class="usage-info hidden" id="usage-info"></div>
+      
       <div class="input-container">
         <input 
           type="text" 
@@ -22,7 +60,7 @@
       <button id="download-btn-top" class="download-btn">Download</button>
     </div>
 
-    <!-- After valid URL is pasted -->
+    <!-- VIDEO INFO STATE: After URL pasted -->
     <div id="video-info-state" class="state">
       <div class="url-display">
         <input 
@@ -65,6 +103,64 @@
       <!-- Error message -->
       <div id="error-message" class="error-message hidden">
         <p id="error-text"></p>
+      </div>
+    </div>
+
+    <!-- SETTINGS STATE -->
+    <div id="settings-state" class="state">
+      <button id="back-btn" class="back-btn">← Back</button>
+      
+      <div class="settings-header">
+        <h2>Account Settings</h2>
+      </div>
+      
+      <div class="settings-content">
+        <div class="settings-item">
+          <div class="settings-label">Email</div>
+          <div id="user-email" class="settings-value">-</div>
+        </div>
+        
+        <div class="settings-item">
+          <div class="settings-label">Current Plan</div>
+          <div id="user-tier" class="settings-value tier-badge">FREE</div>
+        </div>
+        
+        <div class="settings-item">
+          <div class="settings-label">Usage This Month</div>
+          <div id="usage-stats" class="settings-value">-</div>
+        </div>
+        
+        <div class="upgrade-section">
+          <h3>Upgrade to Pro</h3>
+          
+          <div class="pricing-cards">
+            <div class="pricing-card">
+              <div class="plan-name">Pro Monthly</div>
+              <div class="plan-price">Rp 50,000<span>/month</span></div>
+              <ul class="plan-features">
+                <li>40,000 downloads/month</li>
+                <li>30 downloads/minute</li>
+                <li>Priority support</li>
+              </ul>
+            </div>
+            
+            <div class="pricing-card recommended">
+              <div class="badge">SAVE 17%</div>
+              <div class="plan-name">Pro Yearly</div>
+              <div class="plan-price">Rp 500,000<span>/year</span></div>
+              <ul class="plan-features">
+                <li>40,000 downloads/month</li>
+                <li>30 downloads/minute</li>
+                <li>Priority support</li>
+                <li>2 months FREE!</li>
+              </ul>
+            </div>
+          </div>
+          
+          <button id="upgrade-btn" class="download-btn">
+            Upgrade Now
+          </button>
+        </div>
       </div>
     </div>
   </div>
