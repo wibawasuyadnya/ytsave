@@ -18,13 +18,13 @@ const errorText = document.getElementById('error-text');
 let currentVideoData = null;
 let isDownloading = false;
 
-// Validate YouTube URL - NOW INCLUDES SHORTS
+// Validate YouTube URL - INCLUDES SHORTS
 function validateYouTubeUrl(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
     /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
     /youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/ // ADDED: Shorts support
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/
   ];
   
   for (const pattern of patterns) {
@@ -50,59 +50,13 @@ function showError(message) {
   }, 5000);
 }
 
-// Save state to storage
-function saveState() {
-  if (currentVideoData) {
-    chrome.storage.local.set({
-      currentVideo: currentVideoData,
-      isDownloading: isDownloading,
-      downloadProgress: isDownloading ? {
-        visible: !progressContainer.classList.contains('hidden'),
-        width: progressFill.style.width,
-        text: progressText.textContent
-      } : null
-    });
-  }
-}
-
-// Restore state from storage
-async function restoreState() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(['currentVideo', 'isDownloading', 'downloadProgress'], (result) => {
-      if (result.currentVideo) {
-        currentVideoData = result.currentVideo;
-        isDownloading = result.isDownloading || false;
-        
-        // Restore UI
-        urlInput.value = `https://www.youtube.com/watch?v=${currentVideoData.videoId}`;
-        urlDisplay.value = urlInput.value;
-        displayVideoInfo(currentVideoData);
-        
-        // Restore download progress if was downloading
-        if (result.downloadProgress && result.downloadProgress.visible) {
-          progressContainer.classList.remove('hidden');
-          progressFill.style.width = result.downloadProgress.width;
-          progressText.textContent = result.downloadProgress.text;
-          downloadBtnMain.disabled = true;
-          downloadBtnTop.disabled = true;
-        }
-      }
-      resolve();
-    });
-  });
-}
-
-// Clear state
-function clearState() {
-  chrome.storage.local.remove(['currentVideo', 'isDownloading', 'downloadProgress']);
-}
-
-// Fetch video metadata
+// Fetch video metadata using YouTube Data API v3
 async function fetchVideoMetadata(videoId) {
   try {
-    // Use YouTube oEmbed API for basic metadata
-    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-    const response = await fetch(oembedUrl);
+    const API_KEY = 'AIzaSyC47UnEKiZukx3vbyeImrez71-hKxob0V4';
+    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`;
+    
+    const response = await fetch(apiUrl);
     
     if (!response.ok) {
       throw new Error('Failed to fetch video metadata');
@@ -110,10 +64,35 @@ async function fetchVideoMetadata(videoId) {
     
     const data = await response.json();
     
+    // Check if video exists
+    if (!data.items || data.items.length === 0) {
+      throw new Error('Video not found');
+    }
+    
+    const video = data.items[0];
+    const snippet = video.snippet;
+    
+    // Get best quality thumbnail
+    const thumbnail = snippet.thumbnails.maxres?.url || 
+                     snippet.thumbnails.standard?.url || 
+                     snippet.thumbnails.high?.url || 
+                     snippet.thumbnails.medium?.url || 
+                     snippet.thumbnails.default?.url;
+    
+    // Get localized description or fallback to regular description
+    const description = snippet.localized?.description || snippet.description || '';
+    
+    // Truncate description to first 2-3 lines for display
+    const shortDescription = description.split('\n').slice(0, 2).join('\n').substring(0, 150) + '...';
+    
     return {
-      title: data.title,
-      author: data.author_name,
-      thumbnail: data.thumbnail_url,
+      title: snippet.localized?.title || snippet.title,
+      author: snippet.channelTitle,
+      thumbnail: thumbnail,
+      description: shortDescription,
+      fullDescription: description,
+      tags: snippet.tags || [],
+      publishedAt: snippet.publishedAt,
       videoId: videoId
     };
   } catch (error) {
@@ -126,7 +105,7 @@ async function fetchVideoMetadata(videoId) {
 function displayVideoInfo(data) {
   thumbnail.src = data.thumbnail;
   videoTitle.textContent = data.title;
-  videoDescription.textContent = `By ${data.author}`;
+  videoDescription.textContent = `${data.description}`;
   
   initialState.classList.remove('active');
   videoInfoState.classList.add('active');
@@ -135,7 +114,6 @@ function displayVideoInfo(data) {
 // Get highest quality stream URL
 async function getHighestQualityStream(videoId) {
   try {
-    // Send message to background script to handle download
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         { 
@@ -161,66 +139,56 @@ async function getHighestQualityStream(videoId) {
 function updateProgress(width, text) {
   progressFill.style.width = width;
   progressText.textContent = text;
-  saveState(); // Save progress state
 }
 
-// Download video
+// Download video - OPTIMIZED FOR ONE-STEP DOWNLOAD
 async function downloadVideo() {
   if (!currentVideoData || isDownloading) return;
   
   try {
     isDownloading = true;
     
-    // Disable buttons
+    // Change button to grey and disable
+    downloadBtnMain.classList.add('downloading');
     downloadBtnMain.disabled = true;
     downloadBtnTop.disabled = true;
     
     // Show progress - START FROM 0%
     progressContainer.classList.remove('hidden');
     updateProgress('0%', 'Initializing...');
-    
-    // Small delay to show 0% state
+    await new Promise(resolve => setTimeout(resolve, 100));
+    updateProgress('15%', 'Connecting to API...');
     await new Promise(resolve => setTimeout(resolve, 200));
-    
-    // Progress updates with realistic timing
-    updateProgress('20%', 'Preparing download...');
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    updateProgress('40%', 'Getting highest quality stream...');
-    
-    // Get stream URL
+    updateProgress('30%', 'Analyzing video quality...');
+    // Get stream URL - THIS IS THE HEAVY PART
     const streamUrl = await getHighestQualityStream(currentVideoData.videoId);
-    
-    updateProgress('70%', 'Starting download...');
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
+    updateProgress('80%', 'File ready! Preparing download...');
+    await new Promise(resolve => setTimeout(resolve, 300));
     // Clean filename
     const filename = `${currentVideoData.title.replace(/[^a-z0-9]/gi, '_')}.mp4`;
+    updateProgress('95%', 'Opening save dialog...');
     
-    updateProgress('85%', 'Initiating file transfer...');
-    
+    // Start download with saveAs - THIS SHOWS THE SAVE DIALOG IMMEDIATELY
     chrome.downloads.download({
       url: streamUrl,
       filename: filename,
-      saveAs: true
+      saveAs: true // This opens the save dialog instantly
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
         throw new Error(chrome.runtime.lastError.message);
       }
       
-      // Complete
+      // Complete - user has clicked save
       updateProgress('100%', 'Download started!');
       
       setTimeout(() => {
         // Reset everything back to initial state
         progressContainer.classList.add('hidden');
         progressFill.style.width = '0%';
+        downloadBtnMain.classList.remove('downloading');
         downloadBtnMain.disabled = false;
         downloadBtnTop.disabled = false;
         isDownloading = false;
-        
-        // Clear saved state
-        clearState();
         currentVideoData = null;
         
         // Reset UI to initial state
@@ -237,16 +205,18 @@ async function downloadVideo() {
   } catch (error) {
     console.error('Download error:', error);
     showError(error.message || 'Failed to download video. Please try again.');
+    
+    // Reset on error
     progressContainer.classList.add('hidden');
     progressFill.style.width = '0%';
+    downloadBtnMain.classList.remove('downloading');
     downloadBtnMain.disabled = false;
     downloadBtnTop.disabled = false;
     isDownloading = false;
-    saveState();
   }
 }
 
-// Handle URL input
+// Handle URL input - NOT NEEDED ANYMORE, AUTO-LOAD HANDLES IT
 async function handleUrlInput() {
   const url = urlInput.value.trim();
   
@@ -262,6 +232,11 @@ async function handleUrlInput() {
     return;
   }
   
+  await loadVideoInfo(videoId, url);
+}
+
+// Load video information
+async function loadVideoInfo(videoId, url) {
   try {
     // Show loading state
     videoTitle.textContent = 'Loading...';
@@ -272,9 +247,6 @@ async function handleUrlInput() {
     // Fetch metadata
     const metadata = await fetchVideoMetadata(videoId);
     currentVideoData = metadata;
-    
-    // Save state
-    saveState();
     
     // Update URL display
     urlDisplay.value = url;
@@ -304,31 +276,16 @@ urlInput.addEventListener('keypress', (e) => {
 downloadBtnTop.addEventListener('click', handleUrlInput);
 downloadBtnMain.addEventListener('click', downloadVideo);
 
-// Initialize: Restore previous state first, then check current tab
-async function initialize() {
-  // First restore any saved state
-  await restoreState();
-  
-  // Then check if we're on a YouTube page and auto-fill (only if no saved state)
-  if (!currentVideoData) {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0] && tabs[0].url) {
-        const videoId = getVideoId(tabs[0].url);
-        if (videoId) {
-          urlInput.value = tabs[0].url;
-        }
-      }
-    });
-  }
-}
-
-// Run initialization
-initialize();
-
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'downloadComplete') {
-    isDownloading = false;
-    clearState();
+// AUTO-DETECT AND AUTO-LOAD YouTube video on popup open
+chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+  if (tabs[0] && tabs[0].url) {
+    const videoId = getVideoId(tabs[0].url);
+    if (videoId) {
+      // Auto-fill URL
+      urlInput.value = tabs[0].url;
+      
+      // AUTO-LOAD video info immediately
+      await loadVideoInfo(videoId, tabs[0].url);
+    }
   }
 });
